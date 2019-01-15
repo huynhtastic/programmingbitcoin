@@ -57,8 +57,23 @@ class FieldElement:
         Finite field exponentiation using the same logic and reasoning as
         defined in __add__.
         """
+        # We don't want to use this anymore since it's less efficient
         # num = (self.num ** exponent) % self.prime
+
+        """
+        This implementation doesn't handle negative exponents correctly
         num = pow(self.num, exponent, self.prime)
+        """
+
+        """
+        This implementation works, but not as efficiently
+        n = exponent
+        while n < 0:
+            n += self.prime - 1
+        """
+        # We can turn a negative exp into a positive one with moddiv
+        n = exponent % self.prime
+        num = pow(self.num, n, self.prime)
         return self.__class__(num, self.prime)
 
     def __truediv__(self, other):
