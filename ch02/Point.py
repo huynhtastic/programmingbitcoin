@@ -9,6 +9,8 @@ class Point:
         self.b = b
         self.x = x
         self.y = y
+        if self.x == None and self.y == None:
+            return
         if self.y**2 != self.x**3 + a * x + b:
             raise ValueError('({}, {}) is not on the curve; \
                              {} != {}'.format(x, y, y**2, self.x**3 +a*x+b))
@@ -19,3 +21,56 @@ class Point:
 
     def __ne__(self, other):
         return not self == other
+
+    def __add__(self, other):
+        if self.a != other.a or self.b != other.b:
+            raise TypeError('Points {}, {} are not on the same curve'
+                            .format(self, other))
+        elif self.x is None:
+            return other
+        elif self.y is None:
+            return self
+        elif self.x == other.x:
+            return self.__class__(None, None, self.a, self.b)
+        elif self != other:
+            x1, y1, x2, y2 = (self.x, self.y, other.x, other.y)
+
+            slope = (y2 - y1) / (x2 - x1)
+            x3 = (slope ** 2) - x1 - x2
+            y3 = slope * (x1 - x3) - y1
+            return self.__class__(x3, y3, self.a, self.b)
+        elif self == other:
+            if self.y == 0 * self.x:
+                return self.__class__(None, None, self.a, self.b)
+
+            x1, y1 = (self.x, self.y)
+            a = self.a
+
+            slope = (3 * (x1 ** 2) + a) / (2 * y1)
+            x3 = (slope ** 2) - (2 * x1)
+            y3 = slope * (x1 - x3) - y1
+            return self.__class__(x3, y3, self.a, self.b)
+
+    def __repr__(self):
+        if self.x is None:
+            return 'Point(infinity)'
+        else:
+            return 'Point({},{})_{}'.format(self.x.num, self.y.num, self.x.prime)
+
+
+class ECCTest(TestCase):
+    prime = 223
+    a = FieldElement(0, prime)
+    b = FieldElement(7, prime)
+    valid_points = ((192, 105), (17, 56), 1, 193))
+    invalid_points = ((200, 119), (42, 99))
+    for x_raw, y_raw in valid_points:
+        x = FieldElement(x_raw, prime)
+        y = FieldElement(y_raw, prime)
+        Point(x, y, a, b)
+    for x_raw, y_raw in invalid_points:
+        x = FieldElement(x_raw, prime)
+        y = FieldElement(y_raw, prime)
+        with self.assertRaises(ValuesError):
+            Point(x, y, a, b)
+
