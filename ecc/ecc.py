@@ -1,3 +1,4 @@
+from random import randint
 from unittest import TestCase
 
 class FieldElement:
@@ -53,6 +54,10 @@ class FieldElement:
             return TypeError('Cannot multiply two numbers in different fields')
         num = (self.num * other.num) % self.prime
         return self.__class__(num, self.prime)
+
+    def __rmul__(self, coefficient):
+        num = (self.num * coefficient) % self.prime
+        return self.__class__(num=num, prime=self.prime)
 
     def __pow__(self, exponent):
         """
@@ -172,7 +177,7 @@ class Point:
             return other
         elif self.y is None:
             return self
-        elif self.x == other.x:
+        elif self.x == other.x and self.y != other.y:
             return self.__class__(None, None, self.a, self.b)
         elif self != other:
             x1, y1, x2, y2 = (self.x, self.y, other.x, other.y)
@@ -199,19 +204,111 @@ class Point:
         else:
             return 'Point({},{})_{}'.format(self.x.num, self.y.num, self.x.prime)
 
+    def __rmul__(self, coefficient):
+        coef = coefficient
+        current = self
+        result = self.__class__(None, None, self.a, self.b)
+        while coef:
+            if coef & 1:
+                result += current
+            current += current
+            coef >>= 1
+        return result
 
 class ECCTest(TestCase):
-    prime = 223
-    a = FieldElement(0, prime)
-    b = FieldElement(7, prime)
-    valid_points = ((192, 105), (17, 56), 1, 193))
-    invalid_points = ((200, 119), (42, 99))
-    for x_raw, y_raw in valid_points:
-        x = FieldElement(x_raw, prime)
-        y = FieldElement(y_raw, prime)
-        Point(x, y, a, b)
-    for x_raw, y_raw in invalid_points:
-        x = FieldElement(x_raw, prime)
-        y = FieldElement(y_raw, prime)
-        with self.assertRaises(ValuesError):
+
+    def test_on_curve(self):
+        prime = 223
+        a = FieldElement(0, prime)
+        b = FieldElement(7, prime)
+        valid_points = ((192, 105), (17, 56), (1, 193))
+        invalid_points = ((200, 119), (42, 99))
+        for x_raw, y_raw in valid_points:
+            x = FieldElement(x_raw, prime)
+            y = FieldElement(y_raw, prime)
             Point(x, y, a, b)
+        for x_raw, y_raw in invalid_points:
+            x = FieldElement(x_raw, prime)
+            y = FieldElement(y_raw, prime)
+            with self.assertRaises(ValueError):
+                Point(x, y, a, b)
+
+    def test_add(self):
+        prime = 223
+        a = FieldElement(0, prime)
+        b = FieldElement(7, prime)
+        # Exercise 2
+        s1 = [(170, 142), (60, 139)]
+        s2 = [(47, 71), (17, 56)]
+        s3 = [(143, 98), (76, 66)]
+        ss = [s1, s2, s3]
+        for spt in ss:
+            print('\n', spt[0], spt[1])
+            p1 = Point(FieldElement(spt[0][0], prime), FieldElement(spt[0][1], prime), a, b)
+            p2 = Point(FieldElement(spt[1][0], prime), FieldElement(spt[1][1], prime), a, b)
+            print(p1+p2)
+
+P = 2**256 - 2**32 - 977
+
+class S256Field(FieldElement):
+
+    def __init__(self, num, prime=None):
+        super().__init__(num=num, prime=P)
+
+    def __repr__(self):
+        return '{:x}'.format(self.num).zfill(64)
+
+A = 0
+B = 7
+N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
+
+class S256Point(Point):
+    def __init__(self, x, y, a=None, b=None):
+        a, b = S256Field(A), S256Field(B)
+        if type(x) == int:
+            super().__init__(x=S256Field(x), y=S256Field(y), a=a, b=b)
+        else:
+            super().__init__(x=x, y=y, a=a, b=b)
+
+    def __rmul__(self, coefficient):
+        coef = coefficient % N
+        return super().__rmul__(coef)
+
+    def verify(self, z, sig):
+        s_inv = pow(sig.s, N-2, N)
+        u = z * s_inv % N
+        v = sig.r * s_inv % N
+        total = u*G + v*self
+        return total.x.num == sig.r
+
+
+G = S256Point(
+     0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798,
+     0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8)
+
+
+class Signature:
+    def __init__(self, r, s):
+        self.r = r
+        self.s = s
+
+    def __repr__(self):
+        return 'Signature({:x},{:x})'.format(self.r, self.s)
+
+
+class PrivateKey:
+    def __init__(self, secret):
+        self.secret = secret
+        self.point = secret * G
+
+    def hex(self):
+        return '{:x}'.format(self.secret).zfill(64)
+
+    def sign(self, z):
+        k = randint(O, N)
+        r = (k * G).x.num
+        k_inv = pow(k, N-2, N)
+        s = (z + r * self.secret) * k_inv % N
+        if s > N/2:
+            s = N - s
+        return Signature(r, s)
